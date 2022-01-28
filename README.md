@@ -10,14 +10,14 @@ In your `proc-macro`, use it like:
 ```rust
 
 #[proc_macro_attribute]
-fn foo(_attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn baz(_attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // wrap as per usual for `proc-macro2::TokenStream`, here dropping `attr` for simplicity
-    foo2(input.into()).into()
+    baz2(input.into()).into()
 }
 
 
  // or any other macro type
-fn foo2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+fn baz2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let modified = quote::quote!{
         #[derive(Debug, Clone, Copy)]
         struct X {
@@ -25,12 +25,15 @@ fn foo2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         }
     };
 
-    let expanded = Expander::new("bar.rs")
+    let expanded = Expander::new("baz.rs")
         .add_comment("This is generated code!".to_owned())
         .fmt(Edition::_2021)
         // common way of gating this, by making it part of the default feature set
         .dry(cfg!(feature="no-file-expansion"))
-        .write_to_out_dir(ts.clone())?;
+        .write_to_out_dir(modified.clone()).unwrap_or_else(|e| {
+            eprintln!("Failed to write to file: {:?}", e);
+            modified
+        });
     expanded
 }
 ```
@@ -38,7 +41,7 @@ fn foo2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
 will expand into
 
 ```rust
-include!("/absolute/path/to/your/project/target/debug/build/expander-49db7ae3a501e9f4/out/bar.rs");
+include!("/absolute/path/to/your/project/target/debug/build/expander-49db7ae3a501e9f4/out/baz.rs");
 ```
 
 where the file content will be

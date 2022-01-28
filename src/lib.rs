@@ -23,9 +23,9 @@ impl std::default::Default for Edition {
 impl std::fmt::Display for Edition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::_2015 => "--edition 2015",
-            Self::_2018 => "--edition 2018",
-            Self::_2021 => "--edition 2021",
+            Self::_2015 => "2015",
+            Self::_2018 => "2018",
+            Self::_2021 => "2021",
             Self::Unspecified => "",
         };
         write!(f, "{}", s)
@@ -127,17 +127,23 @@ fn expand_to_file(
     edition: Edition,
     comment: impl Into<Option<String>>,
 ) -> Result<TokenStream, std::io::Error> {
+    let token_str = tokens.to_string();
+    let mut bytes = token_str.as_bytes();
+    let hash = blake3::hash(bytes);
+
+    let dest = std::path::PathBuf::from(dest.display().to_string() + "-" + hash.to_hex().as_str() + ".rs");
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open(&dest)?;
+        .open(dest.as_path())?;
 
+    eprintln!("dest: {}", dest.display());
     if let Some(comment) = comment.into() {
         f.write_all(&mut comment.as_bytes())?;
     }
 
-    f.write_all(&mut tokens.to_string().as_bytes())?;
+    f.write_all(&mut bytes)?;
 
     if rustfmt {
         std::process::Command::new("rustfmt")
@@ -164,7 +170,7 @@ mod tests {
                 x: [u8;32],
             }
         };
-        let modified = Expander::new("foo.rs")
+        let modified = Expander::new("foo")
             .add_comment("This is generated code!".to_owned())
             .fmt(Edition::_2021)
             .dry(true)
@@ -181,13 +187,13 @@ mod tests {
                 x: [u8;32],
             }
         };
-        let modified = Expander::new("bar.rs")
+        let modified = Expander::new("bar")
             .add_comment("This is generated code!".to_owned())
             .fmt(Edition::_2021)
             // .dry(false)
             .write_to_out_dir(ts.clone())?;
 
-        assert_ne!(ts.to_string(), dbg!(modified.to_string()));
+        assert_ne!(ts.to_string(), modified.to_string());
         Ok(())
     }
 }
