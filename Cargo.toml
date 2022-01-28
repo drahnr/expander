@@ -1,0 +1,12 @@
+[package]
+name = "expander"
+version = "0.0.1"
+authors = ["Bernhard Schuster <bernhard@ahoi.io>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Expands proc macro output to a file, to enable easier debugging"
+
+[dependencies]
+fs-err = "2"
+proc-macro2 = "1"
+quote = "1"
