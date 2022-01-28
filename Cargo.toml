@@ -5,6 +5,8 @@ authors = ["Bernhard Schuster <bernhard@ahoi.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Expands proc macro output to a file, to enable easier debugging"
+homepage = "https://ahoi.io"
+repository = "https://github.com/drahnr/expander.git"
 
 [dependencies]
 fs-err = "2"
