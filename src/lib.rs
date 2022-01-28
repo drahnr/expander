@@ -7,20 +7,20 @@ use std::path::Path;
 
 /// Rust edition to format for.
 #[derive(Debug, Clone, Copy)]
-pub enum EditionArg {
+pub enum Edition {
     Unspecified,
     _2015,
     _2018,
     _2021,
 }
 
-impl std::default::Default for EditionArg {
+impl std::default::Default for Edition {
     fn default() -> Self {
         Self::Unspecified
     }
 }
 
-impl std::fmt::Display for EditionArg {
+impl std::fmt::Display for Edition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             Self::_2015 => "--edition 2015",
@@ -44,18 +44,18 @@ pub struct Expander {
     /// Format using `rustfmt` in your path.
     fmt: bool,
     /// Use provided edition formatting.
-    fmt_edition_arg: EditionArg,
+    fmt_edition_arg: Edition,
 }
 
 impl Expander {
     /// Create a new expander.
-    pub fn new(name: impl AsRef<str>) -> Self {
+    pub fn new(filename: impl AsRef<str>) -> Self {
         Self {
-            dry: true,
-            filename: name.as_ref().to_owned(),
+            dry: false,
+            filename: filename.as_ref().to_owned(),
             comment: None,
             fmt: false,
-            fmt_edition_arg: EditionArg::default(),
+            fmt_edition_arg: Edition::default(),
         }
     }
 
@@ -66,15 +66,9 @@ impl Expander {
     }
 
     /// Format the resulting file, for readability.
-    pub fn fmt(mut self, edition: EditionArg) -> Self {
+    pub fn fmt(mut self, edition: Edition) -> Self {
         self.fmt_edition_arg = edition;
         self.fmt = true;
-        self
-    }
-
-    /// Set the filname to be placed under `OUT_DIR`.
-    pub fn filename(mut self, name: impl AsRef<str>) -> Self {
-        self.filename = name.as_ref().to_owned();
         self
     }
 
@@ -85,17 +79,13 @@ impl Expander {
     }
 
     /// Create a file with `filename` under `env!("OUT_DIR")`.
-    pub fn write_to_out_dir(
-        self,
-        tokens: TokenStream,
-        filename: &str,
-    ) -> Result<TokenStream, std::io::Error> {
+    pub fn write_to_out_dir(self, tokens: TokenStream) -> Result<TokenStream, std::io::Error> {
         if self.dry {
             Ok(tokens)
         } else {
             let out = env!("OUT_DIR");
             let out = std::path::PathBuf::from(out);
-            let path = out.join(filename);
+            let path = out.join(self.filename);
             expand_to_file(
                 tokens,
                 path.as_path(),
@@ -108,19 +98,18 @@ impl Expander {
     }
 
     /// Create a file with `filename` at `dest`.
-    pub fn write_to(self, tokens: TokenStream, dest: &Path) -> Result<TokenStream, std::io::Error> {
+    pub fn write_to(
+        self,
+        tokens: TokenStream,
+        dest_dir: &Path,
+    ) -> Result<TokenStream, std::io::Error> {
         if self.dry {
             Ok(tokens)
         } else {
             expand_to_file(
                 tokens,
-                dest,
-                dest.parent().ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Provided `dest` must be a file, and hence a parent must exist",
-                    )
-                })?,
+                dest_dir.join(self.filename).as_path(),
+                dest_dir,
                 self.fmt,
                 self.fmt_edition_arg,
                 self.comment,
@@ -135,7 +124,7 @@ fn expand_to_file(
     dest: &Path,
     cwd: &Path,
     rustfmt: bool,
-    edition: EditionArg,
+    edition: Edition,
     comment: impl Into<Option<String>>,
 ) -> Result<TokenStream, std::io::Error> {
     let mut f = fs::OpenOptions::new()
@@ -162,4 +151,43 @@ fn expand_to_file(
     Ok(quote! {
         include!( #dest );
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dry() -> Result<(), std::io::Error> {
+        let ts = quote! {
+            pub struct X {
+                x: [u8;32],
+            }
+        };
+        let modified = Expander::new("foo.rs")
+            .add_comment("This is generated code!".to_owned())
+            .fmt(Edition::_2021)
+            .dry(true)
+            .write_to_out_dir(ts.clone())?;
+
+        assert_eq!(ts.to_string(), modified.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn basic() -> Result<(), std::io::Error> {
+        let ts = quote! {
+            pub struct X {
+                x: [u8;32],
+            }
+        };
+        let modified = Expander::new("bar.rs")
+            .add_comment("This is generated code!".to_owned())
+            .fmt(Edition::_2021)
+            // .dry(false)
+            .write_to_out_dir(ts.clone())?;
+
+        assert_ne!(ts.to_string(), dbg!(modified.to_string()));
+        Ok(())
+    }
 }
