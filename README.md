@@ -32,6 +32,7 @@ fn baz2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let expanded = Expander::new("baz")
         .add_comment("This is generated code!".to_owned())
         .fmt(Edition::_2021)
+        .verbose(true)
         // common way of gating this, by making it part of the default feature set
         .dry(cfg!(feature="no-file-expansion"))
         .write_to_out_dir(modified.clone()).unwrap_or_else(|e| {
@@ -94,16 +95,16 @@ becomes
 
 <pre>
 <font color="#26A269"><b>   Compiling</b></font> expander v0.0.4-alpha.0 (/somewhere/expander)
-dest: /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-874698265c6c4afd1044a1ced12437c901a26034120b464626128281016424db.rs
+expander: writing /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-874698265c6c.rs
 <font color="#F66151"><b>error</b></font><b>: expected item, found `;`</b>
- <font color="#2A7BDE"><b>--&gt; </b></font>/somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-874698265c6c4afd1044a1ced12437c901a26034120b464626128281016424db.rs:2:42
+ <font color="#2A7BDE"><b>--&gt; </b></font>/somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-874698265c6c.rs:2:42
   <font color="#2A7BDE"><b>|</b></font>
 <font color="#2A7BDE"><b>2</b></font> <font color="#2A7BDE"><b>| </b></font>#[derive(Debug, Clone, Copy)] struct A ; ;
   <font color="#2A7BDE"><b>| </b></font>                                         <font color="#F66151"><b>^</b></font>
 
-dest: /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-73b3d5b9bc4641a894d85b878020da6e331ecfd8949c9157c50a92845412a534.rs
+expander: writing /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-73b3d5b9bc46.rs
 <font color="#F66151"><b>error</b></font><b>: expected item, found `;`</b>
- <font color="#2A7BDE"><b>--&gt; </b></font>/somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-73b3d5b9bc4641a894d85b878020da6e331ecfd8949c9157c50a92845412a534.rs:2:42
+ <font color="#2A7BDE"><b>--&gt; </b></font>/somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83d1/out/baz-73b3d5b9bc46.rs:2:42
   <font color="#2A7BDE"><b>|</b></font>
 <font color="#2A7BDE"><b>2</b></font> <font color="#2A7BDE"><b>| </b></font>#[derive(Debug, Clone, Copy)] struct B ; ;
   <font color="#2A7BDE"><b>| </b></font>                                         <font color="#F66151"><b>^</b></font>
