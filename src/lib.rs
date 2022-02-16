@@ -44,6 +44,12 @@ impl std::default::Default for RustFmt {
     }
 }
 
+impl From<Edition> for RustFmt {
+    fn from(edition: Edition) -> Self {
+        RustFmt::Yes(edition)
+    }
+}
+
 /// Expander to replace a tokenstream by a include to a file
 #[derive(Default, Debug)]
 pub struct Expander {
@@ -78,8 +84,8 @@ impl Expander {
     }
 
     /// Format the resulting file, for readability.
-    pub fn fmt(mut self, edition: Edition) -> Self {
-        self.rustfmt = RustFmt::Yes(edition);
+    pub fn fmt(mut self, edition: impl Into<Edition>) -> Self {
+        self.rustfmt = RustFmt::Yes(edition.into());
         self
     }
 
