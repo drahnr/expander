@@ -113,6 +113,7 @@ expander: writing /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83
 <font color="#FFBF00"><b>warning</b></font><b>:</b> build failed, waiting for other jobs to finish...
 <font color="#C01C28"><b>error</b></font><b>:</b> build failed
 </pre>
+
 ---
 
 which tells you exactly where in the generated code of your proc-macro you generated that superfluous
