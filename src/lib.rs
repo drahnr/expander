@@ -171,7 +171,7 @@ fn expand_to_file(
 
     if let RustFmt::Yes(edition) = rustfmt {
         std::process::Command::new("rustfmt")
-            .arg(edition.to_string())
+            .arg(format!("--edition={}", edition))
             .arg(&dest)
             .current_dir(cwd)
             .spawn()?;
