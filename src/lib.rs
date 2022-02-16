@@ -32,19 +32,31 @@ impl std::fmt::Display for Edition {
     }
 }
 
+#[derive(Debug, Clone)]
+enum RustFmt {
+    Yes(Edition),
+    No,
+}
+
+impl std::default::Default for RustFmt {
+    fn default() -> Self {
+        RustFmt::No
+    }
+}
+
 /// Expander to replace a tokenstream by a include to a file
 #[derive(Default, Debug)]
 pub struct Expander {
     /// Determines if the whole file `include!` should be done (`false`) or not (`true`).
     dry: bool,
+    /// If `true`, print the generated destination file to terminal.
+    verbose: bool,
     /// Filename for the generated indirection file to be used.
     filename: String,
     /// Additional comment to be added.
     comment: Option<String>,
     /// Format using `rustfmt` in your path.
-    fmt: bool,
-    /// Use provided edition formatting.
-    fmt_edition_arg: Edition,
+    rustfmt: RustFmt,
 }
 
 impl Expander {
@@ -52,10 +64,10 @@ impl Expander {
     pub fn new(filename: impl AsRef<str>) -> Self {
         Self {
             dry: false,
+            verbose: false,
             filename: filename.as_ref().to_owned(),
             comment: None,
-            fmt: false,
-            fmt_edition_arg: Edition::default(),
+            rustfmt: RustFmt::No,
         }
     }
 
@@ -67,14 +79,19 @@ impl Expander {
 
     /// Format the resulting file, for readability.
     pub fn fmt(mut self, edition: Edition) -> Self {
-        self.fmt_edition_arg = edition;
-        self.fmt = true;
+        self.rustfmt = RustFmt::Yes(edition);
         self
     }
 
     /// Do not modify the provided tokenstream.
     pub fn dry(mut self, dry: bool) -> Self {
         self.dry = dry;
+        self
+    }
+
+    /// Print the path of the generated file to `stderr`.
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
         self
     }
 
@@ -90,9 +107,9 @@ impl Expander {
                 tokens,
                 path.as_path(),
                 out.as_path(),
-                self.fmt,
-                self.fmt_edition_arg,
+                self.rustfmt,
                 self.comment,
+                self.verbose,
             )
         }
     }
@@ -110,9 +127,9 @@ impl Expander {
                 tokens,
                 dest_dir.join(self.filename).as_path(),
                 dest_dir,
-                self.fmt,
-                self.fmt_edition_arg,
+                self.rustfmt,
                 self.comment,
+                self.verbose,
             )
         }
     }
@@ -123,29 +140,36 @@ fn expand_to_file(
     tokens: TokenStream,
     dest: &Path,
     cwd: &Path,
-    rustfmt: bool,
-    edition: Edition,
+    rustfmt: RustFmt,
     comment: impl Into<Option<String>>,
+    verbose: bool,
 ) -> Result<TokenStream, std::io::Error> {
     let token_str = tokens.to_string();
     let mut bytes = token_str.as_bytes();
     let hash = blake3::hash(bytes);
 
-    let dest = std::path::PathBuf::from(dest.display().to_string() + "-" + hash.to_hex().as_str() + ".rs");
+    let mut shortened = hash.to_hex();
+    shortened.truncate(12);
+
+    let dest =
+        std::path::PathBuf::from(dest.display().to_string() + "-" + shortened.as_str() + ".rs");
+
+    if verbose {
+        eprintln!("expander: writing {}", dest.display());
+    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .open(dest.as_path())?;
 
-    eprintln!("dest: {}", dest.display());
     if let Some(comment) = comment.into() {
         f.write_all(&mut comment.as_bytes())?;
     }
 
     f.write_all(&mut bytes)?;
 
-    if rustfmt {
+    if let RustFmt::Yes(edition) = rustfmt {
         std::process::Command::new("rustfmt")
             .arg(edition.to_string())
             .arg(&dest)

@@ -11,7 +11,7 @@ fn baz2(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         #input
     };
 
-    let expanded = Expander::new("baz.rs")
+    let expanded = Expander::new("baz")
         .add_comment("This is generated code!".to_owned())
         .fmt(Edition::_2021)
         .write_to_out_dir(modified).expect("IO error");
