@@ -1,0 +1,324 @@
+resource_types:
+- name: pull-request
+  type: registry-image
+  source:
+    repository: teliaoss/github-pr-resource
+
+resources:
+- name: git-clone-resource
+  type: git
+  webhook_token: ((expander-webhook-token))
+  check_every: 12h
+  source:
+    branch: master
+    uri: https://github.com/drahnr/expander.git
+
+- name: github-release
+  type: github-release
+  webhook_token: ((expander-webhook-token))
+  check_every: 12h
+  source:
+    owner: drahnr
+    access_token: ((sirmergealot-github-token))
+    repository: expander
+
+- name: git-tag-resource
+  type: git
+  webhook_token: ((expander-webhook-token))
+  check_every: 12h
+  source:
+    tag_filter: "v[0-9]*"
+    branch: master
+    uri: https://github.com/drahnr/expander.git
+
+- name: git-pull-request-resource
+  type: pull-request
+  webhook_token: ((expander-webhook-token))
+  check_every: 12h
+  source:
+    repository: drahnr/expander
+    access_token: ((sirmergealot-github-token))
+
+- name: env-glibc
+  type: registry-image
+  source:
+    repository: quay.io/drahnr/rust-glibc-builder
+
+jobs:
+####################################################################################
+#                              P U L L - R E Q U E S T
+####################################################################################
+  - name: pr-validate
+    build_logs_to_retain: 10
+    public: true
+    serial: true
+    plan:
+    - in_parallel:
+      - get: git-pull-request-resource
+        resource: git-pull-request-resource
+        version: every
+        trigger: true
+
+      - get: env-glibc
+
+    - in_parallel:
+      - put: git-pull-request-resource
+        params:
+          path: git-pull-request-resource
+          context: meta-check
+          status: pending
+      - put: git-pull-request-resource
+        params:
+          path: git-pull-request-resource
+          context: compile
+          status: pending
+      - put: git-pull-request-resource
+        params:
+          path: git-pull-request-resource
+          context: unit-tests
+          status: pending
+
+    - in_parallel:
+      - task: compile-pr
+        timeout: 40m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-pull-request-resource
+          outputs:
+          - name: binary
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              export CARGO_HOME="$(pwd)/../cargo"
+              export CARGO_TARGET_DIR="$(pwd)/../target"
+
+              sudo chown $(whoami): -Rf ${CARGO_HOME}
+              sudo chown $(whoami): -Rf ${CARGO_TARGET_DIR}
+              sudo chown $(whoami): -Rf .
+              sudo chown $(whoami): -Rf ../binary
+
+              cargo +stable build --release
+
+            dir: git-pull-request-resource
+          caches:
+          - path: cargo
+          - path: target
+
+        on_success:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: compile
+            status: success
+        on_failure:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: compile
+            status: failure
+
+      - task: unit-tests-pr
+        timeout: 40m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-pull-request-resource
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              export CARGO_HOME="$(pwd)/../cargo"
+              sudo chown $(whoami): -Rf ${CARGO_HOME} .
+              rustc +stable --version --verbose
+              cargo +stable t
+            dir: git-pull-request-resource
+          caches:
+          - path: cargo
+
+        on_success:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: unit-tests
+            status: success
+        on_failure:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: unit-tests
+            status: failure
+
+      - task: format-check
+        timeout: 10m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-pull-request-resource
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              rustc +stable --version --verbose
+
+              cargo +stable fmt -- --check
+
+            dir: git-pull-request-resource
+
+        on_success:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: meta-check
+            status: success
+
+        on_failure:
+          put: git-pull-request-resource
+          params:
+            path: git-pull-request-resource
+            context: meta-check
+            status: failure
+
+  ####################################################################################
+  #                                 M A S T E R
+  ####################################################################################
+  - name: master-validate
+    build_logs_to_retain: 10
+    public: true
+    serial: true
+    plan:
+    - in_parallel:
+      - get: env-glibc
+      - get: git-repo
+        resource: git-clone-resource
+        trigger: true
+
+    - in_parallel:
+      - task: compile-master
+        timeout: 40m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-repo
+          outputs:
+          - name: binary
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              export RUST_BACKTRACE=full
+              export CARGO_HOME="$(pwd)/../cargo"
+              export CARGO_TARGET_DIR="$(pwd)/../target"
+
+              sudo chown $(whoami): -Rf ${CARGO_HOME}
+              sudo chown $(whoami): -Rf ${CARGO_TARGET_DIR}
+              sudo chown $(whoami): -Rf .
+              sudo chown $(whoami): -Rf ../binary
+
+              cargo +stable build --release
+
+            dir: git-repo
+          caches:
+          - path: cargo
+          - path: target
+
+      - task: unit-tests-master
+        timeout: 40m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-repo
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              export RUST_BACKTRACE=1
+              export CARGO_HOME="$(pwd)/../cargo"
+              sudo chown $(whoami): -Rf ${CARGO_HOME} .
+              rustc +stable --version --verbose
+
+              cargo +stable test
+
+            dir: git-repo
+          caches:
+          - path: cargo
+
+      - task: validate-meta-master
+        timeout: 15m
+        image: env-glibc
+        config:
+          platform: linux
+          inputs:
+          - name: git-repo
+          run:
+            # user: root
+            path: sh
+            args:
+            - -exc
+            - |
+              export CARGO_HOME="$(pwd)/../cargo"
+              sudo chown $(whoami): -Rf ${CARGO_HOME} .
+              rustc +stable --version --verbose
+
+              cargo +stable fmt -- --check
+
+            dir: git-repo
+          caches:
+          - path: cargo
+
+  - name: publish-github-release
+    build_logs_to_retain: 5
+    public: false
+    serial: true
+    plan:
+    - get: env-glibc
+    - get: git-repo
+      resource: git-tag-resource
+      trigger: true
+
+    - task: github-release
+      timeout: 40m
+      image: env-glibc
+      config:
+        platform: linux
+        inputs:
+        - name: git-repo
+        outputs:
+        - name: release-info
+        caches:
+        - path: cargo
+        run:
+          path: sh
+          args:
+            - -exc
+            - |
+              export RUST_BACKTRACE=full
+              export CARGO_HOME="$(pwd)/../cargo"
+              sudo chown $(whoami): -Rf ${CARGO_HOME} .
+
+          dir: git-repo
+
+    - in_parallel:
+      - put: github-release
+        params:
+          name: release-info/NAME
+          tag: release-info/TAG
+          commitish: release-info/COMMITISH
+          globs:
+          - release-info/artifacts/*
