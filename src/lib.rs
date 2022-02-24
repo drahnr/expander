@@ -101,22 +101,34 @@ impl Expander {
         self
     }
 
+    #[cfg(feature = "syndicate")]
+    /// Create a file with `filename` under `env!("OUT_DIR")` if it's not an `Err(_)`.
+    pub fn maybe_write_to_out_dir(
+        self,
+        tokens: impl Into<Result<TokenStream, syn::Error>>,
+    ) -> Result<TokenStream, std::io::Error> {
+        self.maybe_write_to(
+            tokens.into(),
+            std::path::PathBuf::from(env!("OUT_DIR")).as_path(),
+        )
+    }
+
     /// Create a file with `filename` under `env!("OUT_DIR")`.
     pub fn write_to_out_dir(self, tokens: TokenStream) -> Result<TokenStream, std::io::Error> {
-        if self.dry {
-            Ok(tokens)
-        } else {
-            let out = env!("OUT_DIR");
-            let out = std::path::PathBuf::from(out);
-            let path = out.join(self.filename);
-            expand_to_file(
-                tokens,
-                path.as_path(),
-                out.as_path(),
-                self.rustfmt,
-                self.comment,
-                self.verbose,
-            )
+        let out = std::path::PathBuf::from(env!("OUT_DIR"));
+        self.write_to(tokens, out.as_path())
+    }
+
+    #[cfg(feature = "syndicate")]
+    /// Create a file with `filename` at `dest` if it's not an `Err(_)`.
+    pub fn maybe_write_to(
+        self,
+        maybe_tokens: Result<TokenStream, syn::Error>,
+        dest_dir: &Path,
+    ) -> Result<TokenStream, std::io::Error> {
+        match maybe_tokens {
+            Ok(tokens) => self.write_to(tokens, dest_dir),
+            Err(err) => Ok(err.to_compile_error()),
         }
     }
 
@@ -197,40 +209,4 @@ fn expand_to_file(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dry() -> Result<(), std::io::Error> {
-        let ts = quote! {
-            pub struct X {
-                x: [u8;32],
-            }
-        };
-        let modified = Expander::new("foo")
-            .add_comment("This is generated code!".to_owned())
-            .fmt(Edition::_2021)
-            .dry(true)
-            .write_to_out_dir(ts.clone())?;
-
-        assert_eq!(ts.to_string(), modified.to_string());
-        Ok(())
-    }
-
-    #[test]
-    fn basic() -> Result<(), std::io::Error> {
-        let ts = quote! {
-            pub struct X {
-                x: [u8;32],
-            }
-        };
-        let modified = Expander::new("bar")
-            .add_comment("This is generated code!".to_owned())
-            .fmt(Edition::_2021)
-            // .dry(false)
-            .write_to_out_dir(ts.clone())?;
-
-        assert_ne!(ts.to_string(), modified.to_string());
-        Ok(())
-    }
-}
+mod tests;
