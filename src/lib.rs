@@ -153,6 +153,17 @@ impl Expander {
     }
 }
 
+/// Take the leading 6 bytes and convert them to 12 hex ascii characters.
+fn make_suffix(digest: &[u8; 32]) -> String {
+    let mut shortened_hex = String::with_capacity(12);
+    const TABLE: &[u8] = b"0123456789abcdef";
+    for &byte in digest.iter().take(6) {
+        shortened_hex.push(TABLE[((byte >> 4) & 0x0F) as usize] as char);
+        shortened_hex.push(TABLE[((byte >> 0) & 0x0F) as usize] as char);
+    }
+    shortened_hex
+}
+
 /// Expand a proc-macro to file.
 fn expand_to_file(
     tokens: TokenStream,
@@ -165,16 +176,7 @@ fn expand_to_file(
     let token_str = tokens.to_string();
     let mut bytes = token_str.as_bytes();
     let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
-
-    let digest: &[u8; 32] = hash.as_ref();
-
-    // take the leading 12 hex characters
-    let mut shortened_hex = String::with_capacity(12);
-    const TABLE: &[u8] = b"0123456789abcdef";
-    for &byte in digest.iter().take(6) {
-        shortened_hex.push(TABLE[((byte >> 4) & 0xf) as usize] as char);
-        shortened_hex.push(TABLE[((byte >> 0) & 0xf) as usize] as char);
-    }
+    let shortened_hex = make_suffix(hash.as_ref());
 
     let dest =
         std::path::PathBuf::from(dest.display().to_string() + "-" + shortened_hex.as_str() + ".rs");
