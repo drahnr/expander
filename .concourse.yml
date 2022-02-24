@@ -310,9 +310,9 @@ jobs:
             - |
               sudo chown sirmergealot: ../release-info
               sudo chmod o+rw ../release-info
-              git rev-parse HEAD | sed '\n' '' > ../release-info/COMMITISH
-              git tag --contains HEAD | grep '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9-_]+(?:\.[0-9]+)?)?' | head -n 1 | sd '\n' '' > ../release-info/TAG
-              echo "expander-$(cat < ../release-info/TAG)"
+              git rev-parse HEAD | sd '\n' '' > ../release-info/COMMITISH
+              git tag --contains HEAD | rg '^v[0-9]+\.[0-9]+\.[0-9]+(?:-.+(?:\.[0-9]+)?)?$' | head -n 1 | sd '\n' '' > ../release-info/TAG
+              echo "expander $(cat < ../release-info/TAG)" > ../release-info/NAME
 
           dir: git-repo
 
