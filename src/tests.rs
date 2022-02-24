@@ -1,4 +1,5 @@
 use super::*;
+use proc_macro2::Span;
 
 #[test]
 fn dry() -> Result<(), std::io::Error> {
@@ -40,43 +41,37 @@ fn basic() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(feature = "syndicate")]
-mod syndicate {
-    use super::*;
-    use proc_macro2::Span;
+#[test]
+fn syn_ok_is_written_to_external_file() -> Result<(), std::io::Error> {
+    let ts = Ok(quote! {
+        pub struct X {
+            x: [u8;32],
+        }
+    });
+    let modified = Expander::new("bar")
+        .add_comment("This is generated code!".to_owned())
+        .fmt(Edition::_2021)
+        // .dry(false)
+        .maybe_write_to_out_dir(ts.clone())?;
 
-    #[test]
-    fn ok_is_written_to_external_file() -> Result<(), std::io::Error> {
-        let ts = Ok(quote! {
-            pub struct X {
-                x: [u8;32],
-            }
-        });
-        let modified = Expander::new("bar")
-            .add_comment("This is generated code!".to_owned())
-            .fmt(Edition::_2021)
-            // .dry(false)
-            .maybe_write_to_out_dir(ts.clone())?;
+    let s = modified.to_string();
+    assert_ne!(s, ts.unwrap().to_string());
+    assert!(s.contains("include ! ("));
+    Ok(())
+}
 
-        let s = modified.to_string();
-        assert_ne!(s, ts.unwrap().to_string());
-        assert!(s.contains("include ! ("));
-        Ok(())
-    }
+#[test]
+fn syn_error_is_not_written_to_external_file() -> Result<(), std::io::Error> {
+    let ts = Err(syn::Error::new(Span::call_site(), "Hajajajaiii!"));
+    let modified = Expander::new("")
+        .add_comment("This is generated code!".to_owned())
+        .fmt(Edition::_2021)
+        // .dry(false)
+        .maybe_write_to_out_dir(ts.clone())?;
 
-    #[test]
-    fn errors_are_not_written_to_external_file() -> Result<(), std::io::Error> {
-        let ts = Err(syn::Error::new(Span::call_site(), "Hajajajaiii!"));
-        let modified = Expander::new("")
-            .add_comment("This is generated code!".to_owned())
-            .fmt(Edition::_2021)
-            // .dry(false)
-            .maybe_write_to_out_dir(ts.clone())?;
-
-        assert_eq!(
-            ts.unwrap_err().to_compile_error().to_string(),
-            modified.to_string()
-        );
-        Ok(())
-    }
+    assert_eq!(
+        ts.unwrap_err().to_compile_error().to_string(),
+        modified.to_string()
+    );
+    Ok(())
 }

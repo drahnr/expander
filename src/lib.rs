@@ -101,7 +101,7 @@ impl Expander {
         self
     }
 
-    #[cfg(feature = "syndicate")]
+    #[cfg(any(feature = "syndicate", test))]
     /// Create a file with `filename` under `env!("OUT_DIR")` if it's not an `Err(_)`.
     pub fn maybe_write_to_out_dir(
         self,
@@ -119,7 +119,7 @@ impl Expander {
         self.write_to(tokens, out.as_path())
     }
 
-    #[cfg(feature = "syndicate")]
+    #[cfg(any(feature = "syndicate", test))]
     /// Create a file with `filename` at `dest` if it's not an `Err(_)`.
     pub fn maybe_write_to(
         self,
