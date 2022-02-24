@@ -131,3 +131,17 @@ life saver to know what caused the issue rather than having to use `eprintln!` t
 string to the terminal.
 
 > Hint: You can quickly toggle this by using `.dry(true || false)`
+
+
+# Special handling: `syn`
+
+By default `expander` is built with feature `syndicate` which adds `fn maybe_write_*`
+to `struct Expander`, which aids handling of `Result<TokenStream, syn::Error>` for the
+commonly used rust parsing library `syn`.
+
+## Reasoning
+
+`syn::Error::new(Span::call_site(),"yikes!").into_token_stream(self)` becomes `compile_error!("yikes!")`
+which provides better info to the user (that's you!) than when serializing it to file, since the provided
+`span` for the `syn::Error` is printed differently - being pointed to the `compile_error!` invocation
+in the generated file is not helpful, and rustc can point to the `span` instead.
