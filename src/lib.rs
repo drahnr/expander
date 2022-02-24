@@ -152,13 +152,20 @@ fn expand_to_file(
 ) -> Result<TokenStream, std::io::Error> {
     let token_str = tokens.to_string();
     let mut bytes = token_str.as_bytes();
-    let hash = blake3::hash(bytes);
+    let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
 
-    let mut shortened = hash.to_hex();
-    shortened.truncate(12);
+    let digest: &[u8; 32] = hash.as_ref();
+
+    // take the leading 12 hex characters
+    let mut shortened_hex = String::with_capacity(12);
+    const TABLE: &[u8] = b"0123456789abcdef";
+    for &byte in digest.iter().take(6) {
+        shortened_hex.push(TABLE[((byte >> 4) & 0xf) as usize] as char);
+        shortened_hex.push(TABLE[((byte >> 0) & 0xf) as usize] as char);
+    }
 
     let dest =
-        std::path::PathBuf::from(dest.display().to_string() + "-" + shortened.as_str() + ".rs");
+        std::path::PathBuf::from(dest.display().to_string() + "-" + shortened_hex.as_str() + ".rs");
 
     if verbose {
         eprintln!("expander: writing {}", dest.display());
