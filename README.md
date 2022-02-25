@@ -65,7 +65,7 @@ struct X {
 ```
 
 
-# Examplary output
+## Exemplary output
 
 An error in your proc-macro, i.e. an excess `;`, is shown as
 
@@ -122,11 +122,10 @@ expander: writing /somewhere/expander/target/debug/build/expander-8cb9d7a52d4e83
 
 ---
 
-which tells you exactly where in the generated code of your proc-macro you generated that superfluous
-statement.
+which shows exactly where in the generated code, the produce of your proc-macro, rustc found an invalid token sequence.
 
 Now this was a simple example, doing this with macros that would expand to multiple tens of thousand lines of
-code with `cargo-expand`, but only in a few thousand that your particular one generates, it's a
+code when expanded with `cargo-expand`, and still in a few thousand that your particular one generates, it's a
 life saver to know what caused the issue rather than having to use `eprintln!` to print a unformated
 string to the terminal.
 
@@ -139,9 +138,9 @@ By default `expander` is built with feature `syndicate` which adds `fn maybe_wri
 to `struct Expander`, which aids handling of `Result<TokenStream, syn::Error>` for the
 commonly used rust parsing library `syn`.
 
-## Reasoning
+### Reasoning
 
 `syn::Error::new(Span::call_site(),"yikes!").into_token_stream(self)` becomes `compile_error!("yikes!")`
 which provides better info to the user (that's you!) than when serializing it to file, since the provided
 `span` for the `syn::Error` is printed differently - being pointed to the `compile_error!` invocation
-in the generated file is not helpful, and rustc can point to the `span` instead.
+in the generated file is not helpful, and `rustc` can point to the `span` instead.
