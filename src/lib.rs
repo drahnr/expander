@@ -106,11 +106,8 @@ impl Expander {
     pub fn maybe_write_to_out_dir(
         self,
         tokens: impl Into<Result<TokenStream, syn::Error>>,
-    ) -> Result<TokenStream, std::io::Error> {
-        self.maybe_write_to(
-            tokens.into(),
-            std::path::PathBuf::from(env!("OUT_DIR")).as_path(),
-        )
+    ) -> Result<syn::Result<TokenStream>, std::io::Error> {
+        self.maybe_write_to(tokens, std::path::PathBuf::from(env!("OUT_DIR")).as_path())
     }
 
     /// Create a file with `filename` under `env!("OUT_DIR")`.
@@ -123,12 +120,12 @@ impl Expander {
     /// Create a file with `filename` at `dest` if it's not an `Err(_)`.
     pub fn maybe_write_to(
         self,
-        maybe_tokens: Result<TokenStream, syn::Error>,
+        maybe_tokens: impl Into<Result<TokenStream, syn::Error>>,
         dest_dir: &Path,
-    ) -> Result<TokenStream, std::io::Error> {
-        match maybe_tokens {
-            Ok(tokens) => self.write_to(tokens, dest_dir),
-            Err(err) => Ok(err.to_compile_error()),
+    ) -> Result<syn::Result<TokenStream>, std::io::Error> {
+        match maybe_tokens.into() {
+            Ok(tokens) => Ok(Ok(self.write_to(tokens, dest_dir)?)),
+            err => Ok(err),
         }
     }
 
