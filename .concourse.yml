@@ -308,12 +308,13 @@ jobs:
           args:
             - -exc
             - |
-              sudo chown sirmergealot: ../release-info
-              sudo chmod o+rw ../release-info
+              sudo chown -Rf sirmergealot: ../release-info
+              sudo chmod -Rf o+rw ../release-info
+              sudo chown -Rf sirmergealot: .
+              sudo chmod -Rf o+r .
               git rev-parse HEAD | sd '\n' '' > ../release-info/COMMITISH
               git tag --contains HEAD | rg '^v[0-9]+\.[0-9]+\.[0-9]+(?:-.+(?:\.[0-9]+)?)?$' | head -n 1 | sd '\n' '' > ../release-info/TAG
               echo "expander $(cat < ../release-info/TAG)" > ../release-info/NAME
-
           dir: git-repo
 
     - in_parallel:
