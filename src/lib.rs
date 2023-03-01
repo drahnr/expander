@@ -95,7 +95,7 @@ impl Expander {
         self
     }
 
-    /// Print the path of the generated file to `stderr`.
+    /// Print the path of the generated file to `stderr` during the proc-macro invocation.
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
         self
@@ -129,7 +129,7 @@ impl Expander {
         }
     }
 
-    /// Create a file with `filename` at `dest`.
+    /// Create a file with `self.filename` in  `dest_dir`.
     pub fn write_to(
         self,
         tokens: TokenStream,
@@ -162,6 +162,9 @@ fn make_suffix(digest: &[u8; 32]) -> String {
 }
 
 /// Expand a proc-macro to file.
+///
+/// The current working directory `cwd` is only used for the `rustfmt` invocation
+/// and hence influences where the config files would be pulled in from.
 fn expand_to_file(
     tokens: TokenStream,
     dest: &Path,
