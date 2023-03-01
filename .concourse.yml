@@ -27,7 +27,7 @@ resources:
   webhook_token: ((expander-webhook-token))
   check_every: 12h
   source:
-    tag_filter: "v[0-9]+.[0-9]+.[0-9]+.*"
+    tag_regex: "v[0-9]+\\.[0-9]+\\.[0-9]+.*"
     branch: master
     uri: https://github.com/drahnr/expander.git
 
