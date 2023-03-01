@@ -14,4 +14,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1"
 quote = "1"
-expander = { path = "../.." , " version" = "0.0.5" }
+expander = { path = "../..", " version" = "1" }
