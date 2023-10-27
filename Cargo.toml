@@ -1,6 +1,6 @@
 [package]
 name = "expander"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Bernhard Schuster <bernhard@ahoi.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ repository = "https://github.com/drahnr/expander.git"
 fs-err = "2"
 proc-macro2 = "1"
 quote = "1"
-blake2 = "0.10"
+blake2 = { version = "0.10", default-features = false }
 syn = { version = "2", optional = true, default-features = false }
 
 [dev-dependencies]
@@ -20,5 +20,6 @@ baz = { path = "./tests/baz" }
 syn = { version = "2", features = ["extra-traits", "full"] }
 
 [features]
-default = ["syndicate"]
-syndicate = ["syn"]
+default = [ "std", "syndicate" ]
+std = [ "blake2/std" ]
+syndicate = [ "syn" ]
