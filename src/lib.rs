@@ -201,7 +201,7 @@ fn expand_to_file(
             .arg(format!("--edition={}", edition))
             .arg(&dest)
             .current_dir(cwd)
-            .spawn()?;
+            .status()?;
     }
 
     let dest = dest.display().to_string();
