@@ -32,9 +32,35 @@ impl std::fmt::Display for Edition {
     }
 }
 
+/// The channel to use for formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Channel {
+    #[default]
+    Default,
+    Stable,
+    Beta,
+    Nightly,
+}
+
+impl std::fmt::Display for Channel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Stable => "+stable",
+            Self::Beta => "+beta",
+            Self::Nightly => "+nightly",
+            Self::Default => return Ok(()),
+        };
+        write!(f, "{}", s)
+    }
+}
+
 #[derive(Debug, Clone)]
 enum RustFmt {
-    Yes(Edition),
+    Yes {
+        edition: Edition,
+        channel: Channel,
+        allow_failure: bool,
+    },
     No,
 }
 
@@ -46,7 +72,11 @@ impl std::default::Default for RustFmt {
 
 impl From<Edition> for RustFmt {
     fn from(edition: Edition) -> Self {
-        RustFmt::Yes(edition)
+        RustFmt::Yes {
+            edition,
+            channel: Channel::Default,
+            allow_failure: false,
+        }
     }
 }
 
@@ -85,7 +115,30 @@ impl Expander {
 
     /// Format the resulting file, for readability.
     pub fn fmt(mut self, edition: impl Into<Edition>) -> Self {
-        self.rustfmt = RustFmt::Yes(edition.into());
+        self.rustfmt = RustFmt::Yes {
+            edition: edition.into(),
+            channel: Channel::Default,
+            allow_failure: false,
+        };
+        self
+    }
+
+    /// Format the resulting file, for readability.
+    ///
+    /// Allows to specify `channel` and if a failure is fatal in addition.
+    ///
+    /// Note: Calling [`fn fmt(..)`] afterwards will override settings given.
+    pub fn fmt_full(
+        mut self,
+        channel: impl Into<Channel>,
+        edition: impl Into<Edition>,
+        allow_failure: bool,
+    ) -> Self {
+        self.rustfmt = RustFmt::Yes {
+            edition: edition.into(),
+            channel: channel.into(),
+            allow_failure,
+        };
         self
     }
 
@@ -205,12 +258,33 @@ fn expand_to_file(
 
     f.write_all(&mut bytes)?;
 
-    if let RustFmt::Yes(edition) = rustfmt {
-        std::process::Command::new("rustfmt")
+    if let RustFmt::Yes {
+        channel,
+        edition,
+        allow_failure,
+    } = rustfmt
+    {
+        let mut process = std::process::Command::new("rustfmt");
+        if Channel::Default != channel {
+            process.arg(channel.to_string());
+        }
+        process
             .arg(format!("--edition={}", edition))
             .arg(&dest)
-            .current_dir(cwd)
-            .status()?;
+            .current_dir(cwd);
+
+        let res = process.status();
+        if allow_failure {
+            if let Err(err) = res {
+                eprintln!(
+                    "expander: failed to format file {} due to {}",
+                    dest.display(),
+                    err
+                );
+            }
+        } else {
+            res?;
+        }
     }
 
     let dest = dest.display().to_string();
