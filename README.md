@@ -132,7 +132,9 @@ string to the terminal.
 > Hint: You can quickly toggle this by using `.dry(true || false)`
 
 
-# Special handling: `syn`
+# Features
+
+## Special handling: `syn`
 
 By default `expander` is built with feature `syndicate` which adds `fn maybe_write_*`
 to `struct Expander`, which aids handling of `Result<TokenStream, syn::Error>` for the
@@ -144,3 +146,10 @@ commonly used rust parsing library `syn`.
 which provides better info to the user (that's you!) than when serializing it to file, since the provided
 `span` for the `syn::Error` is printed differently - being pointed to the `compile_error!` invocation
 in the generated file is not helpful, and `rustc` can point to the `span` instead.
+
+## `rustfmt`-free formatting: `pretty`
+
+When built with feature `pretty`, the output is formatted with `prettier-please`. Note that this adds
+additional compiletime overhead and weight to the crate as a trade off not needing any host side tooling.
+
+The formatting output will, for any significant amount of lines of code, differ from the output of `rustfmt`.

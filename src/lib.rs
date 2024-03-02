@@ -174,6 +174,15 @@ fn expand_to_file(
     verbose: bool,
 ) -> Result<TokenStream, std::io::Error> {
     let token_str = tokens.to_string();
+    #[cfg(feature = "pretty")]
+    let token_str = match syn::parse_file(&token_str) {
+        Err(e) => {
+            eprintln!("expander: failed to prettify {}: {:?}", dest.display(), e);
+            token_str
+        }
+        Ok(sf) => prettier_please::unparse(&sf),
+    };
+
     let mut bytes = token_str.as_bytes();
     let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
     let shortened_hex = make_suffix(hash.as_ref());
