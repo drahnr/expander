@@ -233,7 +233,7 @@ fn expand_to_file(
             eprintln!("expander: failed to prettify {}: {:?}", dest.display(), e);
             token_str
         }
-        Ok(sf) => prettier_please::unparse(&sf),
+        Ok(sf) => prettyplease::unparse(&sf),
     };
 
     let mut bytes = token_str.as_bytes();
