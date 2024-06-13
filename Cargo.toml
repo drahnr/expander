@@ -14,7 +14,7 @@ proc-macro2 = "1"
 quote = "1"
 blake2 = "0.10"
 syn = { version = "2", optional = true, default-features = false }
-prettier-please = { version = "0.2", optional = true, default-features = false }
+prettyplease = { version = "0.2", optional = true, default-features = false }
 
 [dev-dependencies]
 baz = { path = "./tests/baz" }
@@ -23,4 +23,4 @@ syn = { version = "2", features = ["extra-traits", "parsing", "full"] }
 [features]
 default = ["syndicate", "pretty"]
 syndicate = ["syn"]
-pretty = ["prettier-please", "syn/parsing", "syn/full"]
+pretty = ["prettyplease", "syn/parsing", "syn/full"]
