@@ -88,7 +88,7 @@ pub struct Expander {
     /// If `true`, print the generated destination file to terminal.
     verbose: bool,
     /// Filename for the generated indirection file to be used.
-    filename: String,
+    filename_base: String,
     /// Additional comment to be added.
     comment: Option<String>,
     /// Format using `rustfmt` in your path.
@@ -97,11 +97,14 @@ pub struct Expander {
 
 impl Expander {
     /// Create a new expander.
-    pub fn new(filename: impl AsRef<str>) -> Self {
+    ///
+    /// The `filename_base` will be expanded to `{filename_base}-{digest}.rs` in order to dismabiguate
+    /// .
+    pub fn new(filename_base: impl AsRef<str>) -> Self {
         Self {
             dry: false,
             verbose: false,
-            filename: filename.as_ref().to_owned(),
+            filename_base: filename_base.as_ref().to_owned(),
             comment: None,
             rustfmt: RustFmt::No,
         }
@@ -193,7 +196,7 @@ impl Expander {
         } else {
             expand_to_file(
                 tokens,
-                dest_dir.join(self.filename).as_path(),
+                dest_dir.join(self.filename_base).as_path(),
                 dest_dir,
                 self.rustfmt,
                 self.comment,
@@ -236,6 +239,7 @@ fn expand_to_file(
         Ok(sf) => prettyplease::unparse(&sf),
     };
 
+    // we need to disambiguate for transitive dependencies, that might create different output to not override one another
     let mut bytes = token_str.as_bytes();
     let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
     let shortened_hex = make_suffix(hash.as_ref());
@@ -243,14 +247,35 @@ fn expand_to_file(
     let dest =
         std::path::PathBuf::from(dest.display().to_string() + "-" + shortened_hex.as_str() + ".rs");
 
-    if verbose {
-        eprintln!("expander: writing {}", dest.display());
-    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .open(dest.as_path())?;
+
+    let Ok(mut f) = file_guard::try_lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64) else {
+        // the digest of the file will not match if the content to be written differed, hence any existing lock
+        // means we are already writing the same content to the file
+        if verbose {
+            eprintln!("expander: already in progress of writing identical content to {} by a different crate", dest.display());
+        }
+        // now actually wait until the write is complete
+        let _lock = file_guard::lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64)
+            .expect("File Lock never fails us. qed");
+
+        if verbose {
+            eprintln!("expander: lock was release, referencing");
+        }
+
+        let dest = dest.display().to_string();
+        return Ok(quote! {
+            include!( #dest );
+        });
+    };
+
+    if verbose {
+        eprintln!("expander: writing {}", dest.display());
+    }
 
     if let Some(comment) = comment.into() {
         f.write_all(&mut comment.as_bytes())?;
