@@ -1,6 +1,6 @@
 
 [![crates.io](https://img.shields.io/crates/v/expander.svg)](https://crates.io/crates/expander)
-[![CI](https://ci.spearow.io/api/v1/teams/main/pipelines/expander/jobs/master-validate/badge)](https://ci.spearow.io/teams/main/pipelines/expander/jobs/master-validate)
+[![CI](https://ci.fff.rs/api/v1/teams/main/pipelines/expander/jobs/master-validate/badge)](https://ci.fff.rs/teams/main/pipelines/expander/jobs/master-validate)
 ![commits-since](https://img.shields.io/github/commits-since/drahnr/expander/latest.svg)
 [![rust 1.65.0+ badge](https://img.shields.io/badge/rust-1.65.0+-93450a.svg)](https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html)
 
