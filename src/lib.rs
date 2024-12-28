@@ -253,36 +253,38 @@ fn expand_to_file(
         .truncate(true)
         .open(dest.as_path())?;
 
-    let Ok(mut f) = file_guard::try_lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64) else {
-        // the digest of the file will not match if the content to be written differed, hence any existing lock
-        // means we are already writing the same content to the file
+    {
+        let Ok(mut f) = file_guard::try_lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64) else {
+            // the digest of the file will not match if the content to be written differed, hence any existing lock
+            // means we are already writing the same content to the file
+            if verbose {
+                eprintln!("expander: already in progress of writing identical content to {} by a different crate", dest.display());
+            }
+            // now actually wait until the write is complete
+            let _lock = file_guard::lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64)
+                .expect("File Lock never fails us. qed");
+    
+            if verbose {
+                eprintln!("expander: lock was release, referencing");
+            }
+    
+            let dest = dest.display().to_string();
+            return Ok(quote! {
+                include!( #dest );
+            });
+        };
+    
         if verbose {
-            eprintln!("expander: already in progress of writing identical content to {} by a different crate", dest.display());
+            eprintln!("expander: writing {}", dest.display());
         }
-        // now actually wait until the write is complete
-        let _lock = file_guard::lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64)
-            .expect("File Lock never fails us. qed");
-
-        if verbose {
-            eprintln!("expander: lock was release, referencing");
+    
+        if let Some(comment) = comment.into() {
+            f.write_all(&mut comment.as_bytes())?;
         }
-
-        let dest = dest.display().to_string();
-        return Ok(quote! {
-            include!( #dest );
-        });
-    };
-
-    if verbose {
-        eprintln!("expander: writing {}", dest.display());
+    
+        f.write_all(&mut bytes)?;
     }
-
-    if let Some(comment) = comment.into() {
-        f.write_all(&mut comment.as_bytes())?;
-    }
-
-    f.write_all(&mut bytes)?;
-
+    
     if let RustFmt::Yes {
         channel,
         edition,
