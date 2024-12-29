@@ -253,8 +253,10 @@ fn expand_to_file(
         .truncate(true)
         .open(dest.as_path())?;
 
+    // Force implicit drop of FileGuard before rustfmt to prevent intermittent partial file locking issues on Windows (os error 33)
     {
-        let Ok(mut f) = file_guard::try_lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64) else {
+        let Ok(mut f) = file_guard::try_lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64)
+        else {
             // the digest of the file will not match if the content to be written differed, hence any existing lock
             // means we are already writing the same content to the file
             if verbose {
@@ -263,28 +265,28 @@ fn expand_to_file(
             // now actually wait until the write is complete
             let _lock = file_guard::lock(f.file_mut(), file_guard::Lock::Exclusive, 0, 64)
                 .expect("File Lock never fails us. qed");
-    
+
             if verbose {
                 eprintln!("expander: lock was release, referencing");
             }
-    
+
             let dest = dest.display().to_string();
             return Ok(quote! {
                 include!( #dest );
             });
         };
-    
+
         if verbose {
             eprintln!("expander: writing {}", dest.display());
         }
-    
+
         if let Some(comment) = comment.into() {
             f.write_all(&mut comment.as_bytes())?;
         }
-    
+
         f.write_all(&mut bytes)?;
-    }
-    
+    } // guard implicitly dropped here; now safe to call rustfmt
+
     if let RustFmt::Yes {
         channel,
         edition,
