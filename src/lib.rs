@@ -303,16 +303,35 @@ fn expand_to_file(
             .current_dir(cwd);
 
         let res = process.status();
-        if allow_failure {
-            if let Err(err) = res {
-                eprintln!(
-                    "expander: failed to format file {} due to {}",
-                    dest.display(),
-                    err
-                );
+        match res {
+            Err(err) => {
+                if allow_failure {
+                    eprintln!(
+                        "expander: failed to format file {} due to {}",
+                        dest.display(),
+                        err
+                    );
+                } else {
+                    return Err(err);
+                }
             }
-        } else {
-            res?;
+            Ok(exit_status) => {
+                if !exit_status.success() {
+                    let error = std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "rustfmt failed with exit code {} on file {}",
+                            exit_status.code().unwrap_or(-1),
+                            dest.display()
+                        ),
+                    );
+                    if allow_failure {
+                        eprintln!("expander: {}", error);
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
         }
     }
 
