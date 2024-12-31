@@ -302,43 +302,54 @@ fn expand_to_file(
             .arg(&dest)
             .current_dir(cwd);
 
-        let res = process.status();
-        match res {
-            Err(err) => {
-                if allow_failure {
-                    eprintln!(
-                        "expander: failed to format file {} due to {}",
-                        dest.display(),
-                        err
-                    );
-                } else {
-                    return Err(err);
-                }
-            }
-            Ok(exit_status) => {
-                if !exit_status.success() {
-                    let error = std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "rustfmt failed with exit code {} on file {}",
-                            exit_status.code().unwrap_or(-1),
-                            dest.display()
-                        ),
-                    );
-                    if allow_failure {
-                        eprintln!("expander: {}", error);
-                    } else {
-                        return Err(error);
-                    }
-                }
-            }
-        }
+        handle_rustfmt_result(process.status(), &dest, allow_failure)?;
     }
 
     let dest = dest.display().to_string();
     Ok(quote! {
         include!( #dest );
     })
+}
+
+fn handle_rustfmt_result(
+    res: std::io::Result<std::process::ExitStatus>,
+    dest: &Path,
+    allow_failure: bool,
+) -> std::io::Result<()> {
+    match res {
+        Err(err) => {
+            if allow_failure {
+                eprintln!(
+                    "expander: failed to format file {} due to {}",
+                    dest.display(),
+                    err
+                );
+                Ok(())
+            } else {
+                Err(err)
+            }
+        }
+        Ok(exit_status) => {
+            if !exit_status.success() {
+                let error = std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "rustfmt failed with exit code {} on file {}",
+                        exit_status.code().unwrap_or(-1),
+                        dest.display()
+                    ),
+                );
+                if allow_failure {
+                    eprintln!("expander: {}", error);
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(test)]
