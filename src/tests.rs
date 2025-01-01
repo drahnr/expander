@@ -1,5 +1,15 @@
 use super::*;
 use proc_macro2::Span;
+use std::path::PathBuf;
+use tempfile::TempDir;
+
+fn setup_test_dir() -> TempDir {
+    tempfile::tempdir().expect("Failed to create temp directory")
+}
+
+fn create_test_content(content: &str) -> Vec<u8> {
+    content.as_bytes().to_vec()
+}
 
 #[test]
 fn dry() -> Result<(), std::io::Error> {
@@ -88,11 +98,128 @@ fn test_format_content() {
 }
 
 #[test]
-fn test_formatting_precedence() {
-    // Test different combinations of pretty/rustfmt
+fn test_basic_formatting() {
+    let input = create_test_content("struct Foo{x:i32,y:String}");
+    let result = format_content(
+        &input,
+        Channel::Default,
+        Edition::_2021,
+        false
+    ).expect("Formatting failed");
+
+    let formatted = String::from_utf8(result).expect("Invalid UTF-8");
+    assert!(formatted.contains("struct Foo {\n"));
+    assert!(formatted.contains("    x: i32,\n"));
+    assert!(formatted.contains("    y: String,\n"));
+    assert!(formatted.contains("}\n"));
+}
+
+#[test]
+fn test_formatting_with_comments() {
+    let input = create_test_content(
+        "// Comment\nstruct Foo{x:i32} // Inline comment"
+    );
+    let result = format_content(
+        &input,
+        Channel::Default,
+        Edition::_2021,
+        false
+    ).expect("Formatting failed");
+
+    let formatted = String::from_utf8(result).expect("Invalid UTF-8");
+    assert!(formatted.contains("// Comment\n"));
+    assert!(formatted.contains("// Inline comment\n"));
+}
+
+#[test]
+fn test_complete_expansion() {
+    let temp_dir = setup_test_dir();
+    let dest = temp_dir.path().join("test.rs");
+
+    let tokens = quote::quote! {
+        struct Test {
+            field: i32
+        }
+    };
+
+    let result = expand_to_file(
+        tokens.into(),
+        &dest,
+        temp_dir.path(),
+        RustFmt::Yes {
+            channel: Channel::Default,
+            edition: Edition::_2021,
+            allow_failure: false,
+        },
+        Some("/* Test */".to_string()),
+        true,
+    ).expect("Expansion failed");
+
+    // Check the generated file exists and contains expected content
+    let content = fs::read_to_string(dest.with_extension("rs"))
+        .expect("Failed to read generated file");
+    assert!(content.contains("/* Test */"));
+    assert!(content.contains("struct Test"));
 }
 
 #[test]
 fn test_concurrent_access() {
-    // Test multiple processes trying to format same content
+    use std::thread;
+
+    let temp_dir = setup_test_dir();
+    let dest = temp_dir.path().join("concurrent.rs");
+
+    // Spawn multiple threads trying to expand the same content
+    let handles: Vec<_> = (0..3).map(|i| {
+        let dest = dest.clone();
+        let temp_path = temp_dir.path().to_owned();
+
+        thread::spawn(move || {
+            let tokens = quote::quote! {
+                struct Test#i {
+                    field: i32
+                }
+            };
+
+            expand_to_file(
+                tokens.into(),
+                &dest,
+                &temp_path,
+                RustFmt::Yes {
+                    channel: Channel::Default,
+                    edition: Edition::_2021,
+                    allow_failure: false,
+                },
+                None,
+                true,
+            )
+        })
+    }).collect();
+
+    // Verify all operations completed successfully
+    for handle in handles {
+        handle.join().unwrap().expect("Thread operation failed");
+    }
+}
+
+#[test]
+fn test_formatting_errors() {
+    let input = create_test_content("invalid { rust code");
+    let result = format_content(
+        &input,
+        Channel::Default,
+        Edition::_2021,
+        true  // allow_failure
+    );
+
+    assert!(result.is_ok(), "Should not fail when allow_failure is true");
+
+    let result = format_content(
+        &input,
+        Channel::Default,
+        Edition::_2021,
+        false  // don't allow failure
+    );
+
+    assert!(result.is_err(), "Should fail when allow_failure is false");
 }
