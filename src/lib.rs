@@ -224,7 +224,7 @@ fn make_suffix(digest: &[u8; 32]) -> String {
 fn expand_to_file(
     tokens: TokenStream,
     dest: &Path,
-    cwd: &Path,
+    _cwd: &Path,
     rustfmt: RustFmt,
     comment: impl Into<Option<String>>,
     verbose: bool,
@@ -240,7 +240,7 @@ fn expand_to_file(
     };
 
     // we need to disambiguate for transitive dependencies, that might create different output to not override one another
-    let mut bytes = token_str.as_bytes();
+    let bytes = token_str.as_bytes();
     let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
     let shortened_hex = make_suffix(hash.as_ref());
 
@@ -281,41 +281,73 @@ fn expand_to_file(
         f.write_all(&mut comment.as_bytes())?;
     }
 
-    f.write_all(&mut bytes)?;
-
-    if let RustFmt::Yes {
+    let content = if let RustFmt::Yes {
         channel,
         edition,
         allow_failure,
     } = rustfmt
     {
-        let mut process = std::process::Command::new("rustfmt");
-        if Channel::Default != channel {
-            process.arg(channel.to_string());
-        }
-        process
-            .arg(format!("--edition={}", edition))
-            .arg(&dest)
-            .current_dir(cwd);
+        &format_content(&bytes, channel, edition, allow_failure)?
+    } else {
+        bytes
+    };
 
-        let res = process.status();
-        if allow_failure {
-            if let Err(err) = res {
-                eprintln!(
-                    "expander: failed to format file {} due to {}",
-                    dest.display(),
-                    err
-                );
-            }
-        } else {
-            res?;
-        }
-    }
+    // Now write the content while holding the guard
+    f.write_all(&content)?;
 
     let dest = dest.display().to_string();
     Ok(quote! {
         include!( #dest );
     })
+}
+
+use std::process::Stdio;
+
+fn format_content(
+    content: &[u8],
+    channel: Channel,
+    edition: Edition,
+    allow_failure: bool,
+) -> Result<Vec<u8>, std::io::Error> {
+    let mut process = std::process::Command::new("rustfmt");
+    if Channel::Default != channel {
+        process.arg(channel.to_string());
+    }
+
+    let mut child = process
+        .arg(format!("--edition={}", edition))
+        .arg("--emit=stdout")
+        .arg("--") // Signal to read from stdin
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Write content to rustfmt's stdin
+    if let Some(ref mut stdin) = child.stdin {
+        stdin.write_all(content)?;
+        // Dropping stdin here signals EOF to rustfmt
+    }
+
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        let error = std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "rustfmt failed with exit code {}\nstderr: {}",
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        );
+        if allow_failure {
+            eprintln!("expander: {}", error);
+            Ok(content.to_vec())
+        } else {
+            Err(error)
+        }
+    } else {
+        Ok(output.stdout)
+    }
 }
 
 #[cfg(test)]
