@@ -1,0 +1,59 @@
+name: CI
+
+on: [push, pull_request]
+workflow_dispatch:    # Manual trigger
+  inputs:
+    debug-enabled:    # Optional input parameters
+      description: 'Enable debug logging'
+      required: false
+      default: false
+      type: boolean
+    test-subset:
+      description: 'Run specific test subset'
+      required: false
+      default: 'all'
+      type: choice
+      options:
+        - all
+        - unit
+        - integration
+        - windows-only
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+        include:
+          - os: windows-latest
+            rust: stable-msvc
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust }}
+        override: true
+        components: rustfmt
+
+    # Use the input parameters in steps
+    - name: Build
+      run: cargo build --verbose
+      env:
+        RUST_LOG: ${{ github.event.inputs.debug-enabled && 'debug' || 'info' }}
+
+    - name: Run tests
+      if: github.event.inputs.test-subset == 'all' || github.event.inputs.test-subset == 'unit'
+      run: cargo test --verbose -- --nocapture
+
+    # Optional: Test with different feature combinations
+    - name: Test with pretty feature
+      run: cargo test --features pretty --verbose
