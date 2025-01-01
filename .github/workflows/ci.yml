@@ -1,27 +1,26 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      debug-enabled:    # Optional input parameters
+        description: 'Enable debug logging'
+        required: false
+        default: false
+        type: boolean
+      test-subset:
+        description: 'Run specific test subset'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - windows-only
   push:
   pull_request:
-  workflow_dispatch:    # Manual trigger
   
-  inputs:
-    debug-enabled:    # Optional input parameters
-      description: 'Enable debug logging'
-      required: false
-      default: false
-      type: boolean
-    test-subset:
-      description: 'Run specific test subset'
-      required: false
-      default: 'all'
-      type: choice
-      options:
-        - all
-        - unit
-        - integration
-        - windows-only
-
 env:
   CARGO_TERM_COLOR: always
 
