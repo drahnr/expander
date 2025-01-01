@@ -10,6 +10,15 @@ fn create_test_content(content: &str) -> Vec<u8> {
     content.as_bytes().to_vec()
 }
 
+// Helper function to normalize line endings
+fn normalize_line_endings(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace("\r\n", "\n")
+    } else {
+        s.to_string()
+    }
+}
+
 #[test]
 fn dry() -> Result<(), std::io::Error> {
     let ts = quote! {
@@ -89,20 +98,12 @@ fn syn_error_is_not_written_to_external_file() -> Result<(), std::io::Error> {
 }
 
 #[test]
-fn test_format_content() {
-    let input = b"struct Foo{x:i32}";
-    let result = format_content(input, Channel::Default, Edition::_2021, false).unwrap();
-    let formatted = String::from_utf8(result).unwrap();
-    assert!(formatted.contains("struct Foo {\n    x: i32,\n}"));
-}
-
-#[test]
 fn test_basic_formatting() {
     let input = create_test_content("struct Foo{x:i32,y:String}");
     let result =
         format_content(&input, Channel::Default, Edition::_2021, false).expect("Formatting failed");
 
-    let formatted = String::from_utf8(result).expect("Invalid UTF-8");
+    let formatted = normalize_line_endings(&String::from_utf8(result).expect("Invalid UTF-8"));
     assert!(formatted.contains("struct Foo {\n"));
     assert!(formatted.contains("    x: i32,\n"));
     assert!(formatted.contains("    y: String,\n"));
