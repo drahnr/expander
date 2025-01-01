@@ -21,6 +21,7 @@ file-guard = "0.2.0"
 [dev-dependencies]
 baz = { path = "./tests/baz" }
 syn = { version = "2", features = ["extra-traits", "parsing", "full"] }
+tempfile = "3.14.0"
 
 [features]
 default = ["syndicate", "pretty"]

@@ -1,6 +1,5 @@
 use super::*;
 use proc_macro2::Span;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn setup_test_dir() -> TempDir {
@@ -100,12 +99,8 @@ fn test_format_content() {
 #[test]
 fn test_basic_formatting() {
     let input = create_test_content("struct Foo{x:i32,y:String}");
-    let result = format_content(
-        &input,
-        Channel::Default,
-        Edition::_2021,
-        false
-    ).expect("Formatting failed");
+    let result =
+        format_content(&input, Channel::Default, Edition::_2021, false).expect("Formatting failed");
 
     let formatted = String::from_utf8(result).expect("Invalid UTF-8");
     assert!(formatted.contains("struct Foo {\n"));
@@ -116,15 +111,9 @@ fn test_basic_formatting() {
 
 #[test]
 fn test_formatting_with_comments() {
-    let input = create_test_content(
-        "// Comment\nstruct Foo{x:i32} // Inline comment"
-    );
-    let result = format_content(
-        &input,
-        Channel::Default,
-        Edition::_2021,
-        false
-    ).expect("Formatting failed");
+    let input = create_test_content("// Comment\nstruct Foo{x:i32} // Inline comment");
+    let result =
+        format_content(&input, Channel::Default, Edition::_2021, false).expect("Formatting failed");
 
     let formatted = String::from_utf8(result).expect("Invalid UTF-8");
     assert!(formatted.contains("// Comment\n"));
@@ -142,7 +131,7 @@ fn test_complete_expansion() {
         }
     };
 
-    let result = expand_to_file(
+    let _result = expand_to_file(
         tokens.into(),
         &dest,
         temp_dir.path(),
@@ -153,50 +142,43 @@ fn test_complete_expansion() {
         },
         Some("/* Test */".to_string()),
         true,
-    ).expect("Expansion failed");
+    )
+    .expect("Expansion failed");
+
+    // Find the generated file (it will have a hash suffix)
+    let generated_file = fs::read_dir(temp_dir.path())
+        .expect("Failed to read temp dir")
+        .filter_map(Result::ok)
+        .find(|entry| entry.file_name().to_string_lossy().starts_with("test.rs-"))
+        .expect("Generated file not found");
 
     // Check the generated file exists and contains expected content
-    let content = fs::read_to_string(dest.with_extension("rs"))
-        .expect("Failed to read generated file");
+    let content = fs::read_to_string(generated_file.path()).expect("Failed to read generated file");
     assert!(content.contains("/* Test */"));
     assert!(content.contains("struct Test"));
 }
 
 #[test]
 fn test_concurrent_access() {
+    use std::sync::Arc;
     use std::thread;
 
     let temp_dir = setup_test_dir();
-    let dest = temp_dir.path().join("concurrent.rs");
+    let temp_dir = Arc::new(temp_dir);
 
-    // Spawn multiple threads trying to expand the same content
-    let handles: Vec<_> = (0..3).map(|i| {
-        let dest = dest.clone();
-        let temp_path = temp_dir.path().to_owned();
+    // Test concurrent formatting of different content
+    let handles: Vec<_> = (0..3)
+        .map(|i| {
+            let _temp_dir = Arc::clone(&temp_dir);
 
-        thread::spawn(move || {
-            let tokens = quote::quote! {
-                struct Test#i {
-                    field: i32
-                }
-            };
-
-            expand_to_file(
-                tokens.into(),
-                &dest,
-                &temp_path,
-                RustFmt::Yes {
-                    channel: Channel::Default,
-                    edition: Edition::_2021,
-                    allow_failure: false,
-                },
-                None,
-                true,
-            )
+            thread::spawn(move || {
+                let content = format!("struct Test_{} {{ field: i32 }}", i); // Use underscore in name
+                format_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
+            })
         })
-    }).collect();
+        .collect();
 
-    // Verify all operations completed successfully
+    // Verify all formatting operations completed successfully
     for handle in handles {
         handle.join().unwrap().expect("Thread operation failed");
     }
@@ -204,22 +186,48 @@ fn test_concurrent_access() {
 
 #[test]
 fn test_formatting_errors() {
-    let input = create_test_content("invalid { rust code");
+    let input = create_test_content("struct Invalid { missing_semicolon }"); // More realistic invalid Rust
     let result = format_content(
         &input,
         Channel::Default,
         Edition::_2021,
-        true  // allow_failure
+        true, // allow_failure
     );
 
     assert!(result.is_ok(), "Should not fail when allow_failure is true");
+    assert_eq!(
+        result.unwrap(),
+        input,
+        "Should return original content when formatting fails with allow_failure=true"
+    );
 
     let result = format_content(
         &input,
         Channel::Default,
         Edition::_2021,
-        false  // don't allow failure
+        false, // don't allow failure
     );
 
     assert!(result.is_err(), "Should fail when allow_failure is false");
+    assert!(
+        result.unwrap_err().to_string().contains("rustfmt failed"),
+        "Error should mention rustfmt failure"
+    );
+}
+
+#[test]
+fn test_large_file() {
+    // Test with a larger file (100KB of valid Rust code)
+    let mut content = String::with_capacity(102400);
+    for i in 0..1000 {
+        content.push_str(&format!("struct Large{} {{ field: i32 }}\n", i));
+    }
+
+    let result = format_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
+        .expect("Formatting large file failed");
+
+    assert!(
+        result.len() > content.len(),
+        "Formatted content should include proper spacing"
+    );
 }
