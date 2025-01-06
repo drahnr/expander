@@ -20,7 +20,7 @@ on:
           - windows-only
   push:
   pull_request:
-  
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -52,10 +52,9 @@ jobs:
       env:
         RUST_LOG: ${{ github.event.inputs.debug-enabled && 'debug' || 'info' }}
 
-    - name: Run tests
+    - name: Run tests with feature `pretty`
       if: github.event.inputs.test-subset == 'all' || github.event.inputs.test-subset == 'unit'
-      run: cargo test --verbose -- --nocapture
+      run: cargo test --no-fail-fast -p expander -- --nocapture --show-output
 
-    # Optional: Test with different feature combinations
-    - name: Test with pretty feature
-      run: cargo test --features pretty --verbose
+    - name: Run tests without feature `pretty`
+      run: cargo test --no-default-features --no-fail-fast -p expander -- --nocapture --show-output

@@ -100,8 +100,8 @@ fn syn_error_is_not_written_to_external_file() -> Result<(), std::io::Error> {
 #[test]
 fn test_basic_formatting() {
     let input = create_test_content("struct Foo{x:i32,y:String}");
-    let result =
-        format_content(&input, Channel::Default, Edition::_2021, false).expect("Formatting failed");
+    let result = run_rustfmt_on_content(&input, Channel::Default, Edition::_2021, false)
+        .expect("Formatting failed");
 
     let formatted = normalize_line_endings(&String::from_utf8(result).expect("Invalid UTF-8"));
     assert!(formatted.contains("struct Foo {\n"));
@@ -113,8 +113,8 @@ fn test_basic_formatting() {
 #[test]
 fn test_formatting_with_comments() {
     let input = create_test_content("// Comment\nstruct Foo{x:i32} // Inline comment");
-    let result =
-        format_content(&input, Channel::Default, Edition::_2021, false).expect("Formatting failed");
+    let result = run_rustfmt_on_content(&input, Channel::Default, Edition::_2021, false)
+        .expect("Formatting failed");
 
     let formatted = String::from_utf8(result).expect("Invalid UTF-8");
     assert!(formatted.contains("// Comment\n"));
@@ -174,7 +174,7 @@ fn test_concurrent_access() {
 
             thread::spawn(move || {
                 let content = format!("struct Test_{} {{ field: i32 }}", i); // Use underscore in name
-                format_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
+                run_rustfmt_on_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
             })
         })
         .collect();
@@ -188,7 +188,7 @@ fn test_concurrent_access() {
 #[test]
 fn test_formatting_errors() {
     let input = create_test_content("struct Invalid { missing_semicolon }"); // More realistic invalid Rust
-    let result = format_content(
+    let result = run_rustfmt_on_content(
         &input,
         Channel::Default,
         Edition::_2021,
@@ -202,7 +202,7 @@ fn test_formatting_errors() {
         "Should return original content when formatting fails with allow_failure=true"
     );
 
-    let result = format_content(
+    let result = run_rustfmt_on_content(
         &input,
         Channel::Default,
         Edition::_2021,
@@ -224,11 +224,100 @@ fn test_large_file() {
         content.push_str(&format!("struct Large{} {{ field: i32 }}\n", i));
     }
 
-    let result = format_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
-        .expect("Formatting large file failed");
+    let result =
+        run_rustfmt_on_content(content.as_bytes(), Channel::Default, Edition::_2021, false)
+            .expect("Formatting large file failed");
 
     assert!(
         result.len() > content.len(),
         "Formatted content should include proper spacing"
     );
+}
+
+#[test]
+#[cfg(not(feature = "pretty"))]
+fn test_maybe_rustfmt_without_pretty_feature() {
+    // Test with rustfmt enabled
+    let rustfmt = RustFmt::Yes {
+        channel: Channel::Default,
+        edition: Edition::_2021,
+        allow_failure: false,
+    };
+    let input = "struct Foo{x:i32}".to_string();
+
+    let result = maybe_run_rustfmt_on_content(
+        &rustfmt,
+        true,
+        "test: expander: formatting with rustfmt",
+        input.clone(),
+    )
+    .expect("Formatting failed");
+    let formatted = normalize_line_endings(&String::from_utf8(result).expect("Invalid UTF-8"));
+    assert!(formatted.contains("struct Foo {\n    x: i32,\n}"));
+
+    // Test with rustfmt disabled
+    let rustfmt = RustFmt::No;
+    let result = maybe_run_rustfmt_on_content(
+        &rustfmt,
+        true,
+        "test: expander: formatting with rustfmt",
+        input.clone(),
+    )
+    .expect("Should return unformatted content");
+    let unformatted = String::from_utf8(result).expect("Invalid UTF-8");
+    assert_eq!(unformatted, input);
+}
+
+#[test]
+#[cfg(feature = "pretty")]
+fn test_maybe_rustfmt_with_pretty_feature_failure() {
+    // Invalid Rust code that will fail syn::parse_file
+    let input = "struct Foo { invalid rust".to_string();
+
+    // Test with rustfmt enabled as fallback
+    let rustfmt = RustFmt::Yes {
+        channel: Channel::Default,
+        edition: Edition::_2021,
+        allow_failure: true,
+    };
+
+    let result = maybe_run_rustfmt_on_content(
+        &rustfmt,
+        true,
+        "test: expander falling back to rustfmt because syn::parse failed, with allow_failure=true",
+        input.clone(),
+    )
+    .expect("Should not fail with allow_failure=true");
+
+    // With allow_failure=true, should get original content back
+    assert_eq!(String::from_utf8(result).expect("Invalid UTF-8"), input);
+
+    // Test with rustfmt disabled
+    let rustfmt = RustFmt::No;
+    let result = maybe_run_rustfmt_on_content(
+        &rustfmt,
+        true,
+        "test: expander trying rustfmt because syn::parse failed but rustfmt not available",
+        input.clone(),
+    )
+    .expect("Should return unformatted content");
+    assert_eq!(String::from_utf8(result).expect("Invalid UTF-8"), input);
+}
+
+#[test]
+#[cfg(feature = "pretty")]
+fn test_maybe_rustfmt_with_pretty_feature_failure_strict() {
+    // Invalid Rust code that will fail syn::parse_file
+    let input = "struct Foo { invalid rust".to_string();
+
+    // Test with rustfmt enabled as fallback and allow_failure=false
+    let rustfmt = RustFmt::Yes {
+        channel: Channel::Default,
+        edition: Edition::_2021,
+        allow_failure: false,
+    };
+
+    let result = maybe_run_rustfmt_on_content(&rustfmt, true, "test: expander falling back to rustfmt because syn::parse failed, with allow_failure=false", input);
+    assert!(result.is_err(), "Should fail with allow_failure=false");
+    assert!(result.unwrap_err().to_string().contains("rustfmt failed"));
 }

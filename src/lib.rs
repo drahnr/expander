@@ -4,6 +4,7 @@ use quote::quote;
 use std::env;
 use std::io::Write;
 use std::path::Path;
+use std::process::Stdio;
 
 /// Rust edition to format for.
 #[derive(Debug, Clone, Copy)]
@@ -250,19 +251,12 @@ fn expand_to_file(
                         e
                     );
                     // Fall back to rustfmt if available, regardless of rustfmt setting
-                    if let RustFmt::Yes {
-                        channel,
-                        edition,
-                        allow_failure,
-                    } = rustfmt
-                    {
-                        if verbose {
-                            eprintln!("expander: falling back to rustfmt");
-                        }
-                        format_content(token_str.as_bytes(), channel, edition, allow_failure)?
-                    } else {
-                        token_str.into_bytes()
-                    }
+                    maybe_run_rustfmt_on_content(
+                        &rustfmt,
+                        verbose,
+                        "expander: falling back to rustfmt",
+                        token_str,
+                    )?
                 }
             }
         }
@@ -270,19 +264,12 @@ fn expand_to_file(
         #[cfg(not(feature = "pretty"))]
         {
             // Without pretty feature, use rustfmt if requested
-            if let RustFmt::Yes {
-                channel,
-                edition,
-                allow_failure,
-            } = rustfmt
-            {
-                if verbose {
-                    eprintln!("expander: formatting with rustfmt");
-                }
-                format_content(token_str.as_bytes(), channel, edition, allow_failure)?
-            } else {
-                token_str.into_bytes()
-            }
+            maybe_run_rustfmt_on_content(
+                &rustfmt,
+                verbose,
+                "expander: formatting with rustfmt",
+                token_str,
+            )?
         }
     };
 
@@ -336,9 +323,30 @@ fn expand_to_file(
     })
 }
 
-use std::process::Stdio;
+fn maybe_run_rustfmt_on_content(
+    rustfmt: &RustFmt,
+    verbose: bool,
+    message: &str,
+    token_str: String,
+) -> Result<Vec<u8>, std::io::Error> {
+    Ok(
+        if let RustFmt::Yes {
+            channel,
+            edition,
+            allow_failure,
+        } = *rustfmt
+        {
+            if verbose {
+                eprintln!("{message}");
+            }
+            run_rustfmt_on_content(token_str.as_bytes(), channel, edition, allow_failure)?
+        } else {
+            token_str.into_bytes()
+        },
+    )
+}
 
-fn format_content(
+fn run_rustfmt_on_content(
     content: &[u8],
     channel: Channel,
     edition: Edition,
