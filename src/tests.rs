@@ -248,7 +248,7 @@ fn test_maybe_rustfmt_without_pretty_feature() {
     let result = maybe_run_rustfmt_on_content(
         &rustfmt,
         true,
-        "test: expander: formatting with rustfmt",
+        "test: expander: formatting with rustfmt because feature `pretty` disabled",
         input.clone(),
     )
     .expect("Formatting failed");
@@ -260,7 +260,7 @@ fn test_maybe_rustfmt_without_pretty_feature() {
     let result = maybe_run_rustfmt_on_content(
         &rustfmt,
         true,
-        "test: expander: formatting with rustfmt",
+        "test: expander trying rustfmt because feature `pretty` disabled, but rustfmt is not available",
         input.clone(),
     )
     .expect("Should return unformatted content");
@@ -297,7 +297,7 @@ fn test_maybe_rustfmt_with_pretty_feature_failure() {
     let result = maybe_run_rustfmt_on_content(
         &rustfmt,
         true,
-        "test: expander trying rustfmt because syn::parse failed but rustfmt not available",
+        "test: expander trying rustfmt because syn::parse failed, but rustfmt is not available",
         input.clone(),
     )
     .expect("Should return unformatted content");
