@@ -4,6 +4,7 @@ use quote::quote;
 use std::env;
 use std::io::Write;
 use std::path::Path;
+use std::process::Stdio;
 
 /// Rust edition to format for.
 #[derive(Debug, Clone, Copy)]
@@ -224,24 +225,56 @@ fn make_suffix(digest: &[u8; 32]) -> String {
 fn expand_to_file(
     tokens: TokenStream,
     dest: &Path,
-    cwd: &Path,
+    _cwd: &Path,
     rustfmt: RustFmt,
     comment: impl Into<Option<String>>,
     verbose: bool,
 ) -> Result<TokenStream, std::io::Error> {
     let token_str = tokens.to_string();
-    #[cfg(feature = "pretty")]
-    let token_str = match syn::parse_file(&token_str) {
-        Err(e) => {
-            eprintln!("expander: failed to prettify {}: {:?}", dest.display(), e);
-            token_str
+
+    // Determine the content to write
+    let bytes = {
+        #[cfg(feature = "pretty")]
+        {
+            // Try prettyplease first if the feature is enabled
+            match syn::parse_file(&token_str) {
+                Ok(sf) => {
+                    if verbose {
+                        eprintln!("expander: formatting with prettyplease");
+                    }
+                    prettyplease::unparse(&sf).into_bytes()
+                }
+                Err(e) => {
+                    eprintln!(
+                        "expander: prettyplease failed for {}: {:?}",
+                        dest.display(),
+                        e
+                    );
+                    // Fall back to rustfmt if available, regardless of rustfmt setting
+                    maybe_run_rustfmt_on_content(
+                        &rustfmt,
+                        verbose,
+                        "expander: falling back to rustfmt",
+                        token_str,
+                    )?
+                }
+            }
         }
-        Ok(sf) => prettyplease::unparse(&sf),
+
+        #[cfg(not(feature = "pretty"))]
+        {
+            // Without pretty feature, use rustfmt if requested
+            maybe_run_rustfmt_on_content(
+                &rustfmt,
+                verbose,
+                "expander: formatting with rustfmt",
+                token_str,
+            )?
+        }
     };
 
     // we need to disambiguate for transitive dependencies, that might create different output to not override one another
-    let mut bytes = token_str.as_bytes();
-    let hash = <blake2::Blake2s256 as blake2::Digest>::digest(bytes);
+    let hash = <blake2::Blake2s256 as blake2::Digest>::digest(&bytes);
     let shortened_hex = make_suffix(hash.as_ref());
 
     let dest =
@@ -281,41 +314,83 @@ fn expand_to_file(
         f.write_all(&mut comment.as_bytes())?;
     }
 
-    f.write_all(&mut bytes)?;
-
-    if let RustFmt::Yes {
-        channel,
-        edition,
-        allow_failure,
-    } = rustfmt
-    {
-        let mut process = std::process::Command::new("rustfmt");
-        if Channel::Default != channel {
-            process.arg(channel.to_string());
-        }
-        process
-            .arg(format!("--edition={}", edition))
-            .arg(&dest)
-            .current_dir(cwd);
-
-        let res = process.status();
-        if allow_failure {
-            if let Err(err) = res {
-                eprintln!(
-                    "expander: failed to format file {} due to {}",
-                    dest.display(),
-                    err
-                );
-            }
-        } else {
-            res?;
-        }
-    }
+    // Write the already-formatted content while holding the guard
+    f.write_all(&bytes)?;
 
     let dest = dest.display().to_string();
     Ok(quote! {
         include!( #dest );
     })
+}
+
+fn maybe_run_rustfmt_on_content(
+    rustfmt: &RustFmt,
+    verbose: bool,
+    message: &str,
+    token_str: String,
+) -> Result<Vec<u8>, std::io::Error> {
+    Ok(
+        if let RustFmt::Yes {
+            channel,
+            edition,
+            allow_failure,
+        } = *rustfmt
+        {
+            if verbose {
+                eprintln!("{message}");
+            }
+            run_rustfmt_on_content(token_str.as_bytes(), channel, edition, allow_failure)?
+        } else {
+            token_str.into_bytes()
+        },
+    )
+}
+
+fn run_rustfmt_on_content(
+    content: &[u8],
+    channel: Channel,
+    edition: Edition,
+    allow_failure: bool,
+) -> Result<Vec<u8>, std::io::Error> {
+    let mut process = std::process::Command::new("rustfmt");
+    if Channel::Default != channel {
+        process.arg(channel.to_string());
+    }
+
+    let mut child = process
+        .arg(format!("--edition={}", edition))
+        .arg("--emit=stdout")
+        .arg("--") // Signal to read from stdin
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Write content to rustfmt's stdin
+    if let Some(ref mut stdin) = child.stdin {
+        stdin.write_all(content)?;
+        // Dropping stdin here signals EOF to rustfmt
+    }
+
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        let error = std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "rustfmt failed with exit code {}\nstderr: {}",
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        );
+        if allow_failure {
+            eprintln!("expander: {}", error);
+            Ok(content.to_vec())
+        } else {
+            Err(error)
+        }
+    } else {
+        Ok(output.stdout)
+    }
 }
 
 #[cfg(test)]
